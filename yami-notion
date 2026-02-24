@@ -1,0 +1,37 @@
+#!/bin/bash
+# yami-notion: Lightweight wrapper for Team Yami Notion operations.
+
+NOTION_KEY=$(cat ~/.config/notion/api_key)
+NOTION_VERSION="2022-06-28" # Stable version for database operations
+
+COMMAND=$1
+PAGE_ID=$2
+shift 2
+
+case "$COMMAND" in
+  "update-status")
+    STATUS=$1
+    curl -s -X PATCH "https://api.notion.com/v1/pages/$PAGE_ID" \
+      -H "Authorization: Bearer $NOTION_KEY" \
+      -H "Notion-Version: $NOTION_VERSION" \
+      -H "Content-Type: application/json" \
+      -d "{\"properties\": {\"Status\": {\"status\": {\"name\": \"$STATUS\"}}}}"
+    ;;
+  "add-comment")
+    TEXT="$*"
+    curl -s -X PATCH "https://api.notion.com/v1/blocks/$PAGE_ID/children" \
+      -H "Authorization: Bearer $NOTION_KEY" \
+      -H "Notion-Version: $NOTION_VERSION" \
+      -H "Content-Type: application/json" \
+      -d "{\"children\": [{\"object\": \"block\", \"type\": \"paragraph\", \"paragraph\": {\"rich_text\": [{\"text\": {\"content\": \"$TEXT\"}}]}}]}"
+    ;;
+  "get-page")
+    curl -s "https://api.notion.com/v1/pages/$PAGE_ID" \
+      -H "Authorization: Bearer $NOTION_KEY" \
+      -H "Notion-Version: $NOTION_VERSION"
+    ;;
+  *)
+    echo "Usage: yami-notion {update-status|add-comment|get-page} <page_id> [args...]"
+    exit 1
+    ;;
+esac
