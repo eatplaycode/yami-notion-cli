@@ -1,37 +1,88 @@
 #!/bin/bash
-# yami-notion: Lightweight wrapper for Team Yami Notion operations.
+# yami-notion: Comprehensive CLI for Team Yami Notion operations.
+# Handles page creation, status updates, commenting, and project linking.
 
 NOTION_KEY=$(cat ~/.config/notion/api_key)
-NOTION_VERSION="2022-06-28" # Stable version for database operations
+NOTION_VERSION="2022-06-28"
+DB_ID="3119e6a65f4d809098c9d9ee58b65868"
 
 COMMAND=$1
-PAGE_ID=$2
-shift 2
+shift
 
 case "$COMMAND" in
+  "create")
+    TITLE=$1
+    DESC=$2
+    DIR=$3
+    if [ -z "$TITLE" ]; then echo "Usage: create <title> [description] [project_dir]"; exit 1; fi
+    
+    curl -s -X POST "https://api.notion.com/v1/pages" \
+      -H "Authorization: Bearer $NOTION_KEY" \
+      -H "Notion-Version: $NOTION_VERSION" \
+      -H "Content-Type: application/json" \
+      -d "{
+        \"parent\": {\"database_id\": \"$DB_ID\"},
+        \"properties\": {
+          \"Task name\": {\"title\": [{\"text\": {\"content\": \"$TITLE\"}}]},
+          \"Status\": {\"status\": {\"name\": \"Analyzing\"}},
+          \"Description\": {\"rich_text\": [{\"text\": {\"content\": \"${DESC:-No description provided.}\"}}]},
+          \"Project directory\": {\"rich_text\": [{\"text\": {\"content\": \"${DIR:-/home/ubuntu/.openclaw/projects/}\"}}]}
+        }
+      }"
+    ;;
+
   "update-status")
-    STATUS=$1
+    PAGE_ID=$1
+    STATUS=$2
+    if [ -z "$STATUS" ]; then echo "Usage: update-status <page_id> <status>"; exit 1; fi
+    
     curl -s -X PATCH "https://api.notion.com/v1/pages/$PAGE_ID" \
       -H "Authorization: Bearer $NOTION_KEY" \
       -H "Notion-Version: $NOTION_VERSION" \
       -H "Content-Type: application/json" \
       -d "{\"properties\": {\"Status\": {\"status\": {\"name\": \"$STATUS\"}}}}"
     ;;
+
   "add-comment")
+    PAGE_ID=$1
+    shift
     TEXT="$*"
+    if [ -z "$TEXT" ]; then echo "Usage: add-comment <page_id> <text>"; exit 1; fi
+    
     curl -s -X PATCH "https://api.notion.com/v1/blocks/$PAGE_ID/children" \
       -H "Authorization: Bearer $NOTION_KEY" \
       -H "Notion-Version: $NOTION_VERSION" \
       -H "Content-Type: application/json" \
       -d "{\"children\": [{\"object\": \"block\", \"type\": \"paragraph\", \"paragraph\": {\"rich_text\": [{\"text\": {\"content\": \"$TEXT\"}}]}}]}"
     ;;
-  "get-page")
+
+  "get")
+    PAGE_ID=$1
+    if [ -z "$PAGE_ID" ]; then echo "Usage: get <page_id>"; exit 1; fi
     curl -s "https://api.notion.com/v1/pages/$PAGE_ID" \
       -H "Authorization: Bearer $NOTION_KEY" \
       -H "Notion-Version: $NOTION_VERSION"
     ;;
+
+  "query")
+    FILTER_VAL=$1
+    if [ -z "$FILTER_VAL" ]; then
+      # List all if no filter
+      curl -s -X POST "https://api.notion.com/v1/databases/$DB_ID/query" \
+        -H "Authorization: Bearer $NOTION_KEY" \
+        -H "Notion-Version: $NOTION_VERSION"
+    else
+      # Filter by status
+      curl -s -X POST "https://api.notion.com/v1/databases/$DB_ID/query" \
+        -H "Authorization: Bearer $NOTION_KEY" \
+        -H "Notion-Version: $NOTION_VERSION" \
+        -H "Content-Type: application/json" \
+        -d "{\"filter\": {\"property\": \"Status\", \"status\": {\"equals\": \"$FILTER_VAL\"}}}"
+    fi
+    ;;
+
   *)
-    echo "Usage: yami-notion {update-status|add-comment|get-page} <page_id> [args...]"
+    echo "Usage: yami-notion {create|update-status|add-comment|get|query} [args...]"
     exit 1
     ;;
 esac
